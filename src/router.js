@@ -6,7 +6,7 @@ const intervals = {};
 
 router.get("/login", (req, res) => {
     const scopes = encodeURIComponent("playlist-modify-public playlist-modify-private");
-    const redirectUri = encodeURIComponent("http://localhost:3000/callback");
+    const redirectUri = encodeURIComponent(process.env.BASE_URL+"/callback");
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${process.env.CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&scope=${scopes}`;
   
     res.redirect(authUrl);
