@@ -36,7 +36,11 @@ router.get("/callback", async (req, res) => {
         res.cookie("access_token", accessToken, { httpOnly: true, secure: true });
         res.json({ message:"You're logged successfully"}); 
     } else {
-      res.status(400).json({ error: "An error ocurred. Try again" });
+        if (process.env.TEST_MODE==="true"){
+            res.status(400).json({ error: "An error occurred. Try again", json: tokenData });
+        }else{
+        res.status(400).json({ error: "An error occurred. Try again" });
+        }
     }
   });
 
