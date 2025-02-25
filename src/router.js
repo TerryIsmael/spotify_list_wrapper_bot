@@ -23,7 +23,7 @@ router.get("/callback", async (req, res) => {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: "http://localhost:3000/callback",
+        redirect_uri: process.env.BASE_URL+"/callback",
         client_id: process.env.CLIENT_ID,
         client_secret: process.env.CLIENT_SECRET,
       }),
