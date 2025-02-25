@@ -6,16 +6,16 @@ const intervals = {};
 
 router.get("/login", (req, res) => {
     const scopes = encodeURIComponent("playlist-modify-public playlist-modify-private");
-    const redirectUri = encodeURIComponent(process.env.BASE_URL+"/callback");
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${process.env.CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&scope=${scopes}`;
+    const redirect_uri = encodeURIComponent(process.env.BASE_URL+"/callback");
+    const auth_url = `https://accounts.spotify.com/authorize?client_id=${process.env.CLIENT_ID}&response_type=code&redirect_uri=${redirect_uri}&scope=${scopes}`;
   
-    res.redirect(authUrl);
+    res.redirect(auth_url);
 });
 
 router.get("/callback", async (req, res) => {
     const code = req.query.code;
   
-    const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
+    const token_response = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -29,25 +29,29 @@ router.get("/callback", async (req, res) => {
       }),
     });
   
-    const tokenData = await tokenResponse.json();
+    const token_data = await token_response.json();
   
-    if (tokenData.access_token) {
-        const accessToken = tokenData.access_token;
-        res.cookie("access_token", accessToken, { httpOnly: true, secure: true });
+    if (token_data.access_token) {
+        const access_token = token_data.access_token;
+        res.cookie("access_token", access_token, { httpOnly: true, secure: true });
         res.json({ message:"You're logged successfully"}); 
     } else {
-        if (process.env.TEST_MODE==="true"){
-            res.status(400).json({ error: "An error occurred. Try again", json: tokenData });
-        }else{
         res.status(400).json({ error: "An error occurred. Try again" });
-        }
     }
   });
 
 router.post('/lists/', async (req, res, next) => {
     try{
-        const accessToken = req.cookies.access_token;
-        const listname = req.body.listname;
+        if(!req.cookies.access_token){
+            res.status(401).json({ error: "You need to be logged in" });
+            return;
+        }
+        if(!req.body.list_ids || !req.body.list_name){
+            res.status(400).json({ error: "You need to provide list_name and list_ids (splitted by commas)" });
+            return;
+        }
+        const access_token = req.cookies.access_token;
+        const list_name = req.body.list_name;
         const list_ids = req.body.list_ids.split(',');
         let uris= []
 
@@ -57,7 +61,7 @@ router.post('/lists/', async (req, res, next) => {
             while (iterate){
                 const res = await fetch(`https://api.spotify.com/v1/playlists/${list_id}/tracks?fields=items%28track%28uri%29%29&offset=${offset}&limit=100`, {
                     headers: {
-                    Authorization: `Bearer ${accessToken}`,
+                    Authorization: `Bearer ${access_token}`,
                     },
                     method: 'GET'
                 });
@@ -68,57 +72,66 @@ router.post('/lists/', async (req, res, next) => {
             }
         }
 
-        const meRes = await fetch(`https://api.spotify.com/v1/me`, {
+        const me_res = await fetch(`https://api.spotify.com/v1/me`, {
             headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${access_token}`,
             },
             method: 'GET'
         });
-        const userId = (await meRes.json()).id;
+        const user_id = (await me_res.json()).id;
         
 
 
-        const createPlaylistRes = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+        const create_playlist_res = await fetch(`https://api.spotify.com/v1/users/${user_id}/playlists`, {
             headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${access_token}`,
             },
             method: 'POST',
             body: JSON.stringify({
-                name: listname
+                name: list_name
             })
         });
-        const newListId = (await createPlaylistRes.json()).id
+        const new_list_id = (await create_playlist_res.json()).id
 
         while(uris.length > 0){
-            const subUris = uris.splice(0,100);
-            const addSongsRes = await fetch(`https://api.spotify.com/v1/playlists/${newListId}/tracks`, {
+            const sub_uris = uris.splice(0,100);
+            await fetch(`https://api.spotify.com/v1/playlists/${new_list_id}/tracks`, {
                 headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${access_token}`,
                 },
                 method: 'POST',
                 body: JSON.stringify({
-                    uris: subUris
+                    uris: sub_uris
                 })
             });
         }
 
-        intervals[newListId] = setInterval(async () => {
-            await updateList(accessToken, newListId, list_ids);
+        intervals[new_list_id] = setInterval(async () => {
+            await updateList(access_token, new_list_id, list_ids);
         }, 60000);
 
         res.status(200).json(uris);
     } catch (error) {
-        res.status(500).json({ error: error });
+        res.status(500).json({ error: "Internal error" });
     }
 });
 
 router.put('/lists/', async (req, res, next) => {
     try{
-        const accessToken = req.cookies.access_token;
+        if(!req.cookies.access_token){
+            res.status(401).json({ error: "You need to be logged in" });
+            return;
+        }
+        if(!req.body.list_id || !req.body.sublists_ids){
+            res.status(400).json({ error: "You need to provide list_id and sublists_ids (splitted by commas)" });
+            return;
+        }
+
+        const access_token = req.cookies.access_token;
         const list_id = req.body.list_id;
         const sublists_ids = req.body.sublists_ids.split(',');
         
-        await updateList(accessToken, list_id, sublists_ids);
+        await updateList(access_token, list_id, sublists_ids);
 
         if(intervals[list_id]){
             clearInterval(intervals[list_id]);
@@ -126,16 +139,16 @@ router.put('/lists/', async (req, res, next) => {
         }
 
         intervals[list_id] = setInterval(async () => {
-            await updateList(accessToken, list_id, sublists_ids);
+            await updateList(access_token, list_id, sublists_ids);
         }, 60000);
 
         res.status(200).json("Updated successfully");
     }catch (error) {
-        res.status(500).json({ error: error });
+        res.status(500).json({ error: "Internal error" });
     }
 });
 
-async function updateList(accessToken, list_id, sublists_ids){
+async function updateList(access_token, list_id, sublists_ids){
     const list_uris = []
         const sublists_uris = []
 
@@ -144,7 +157,7 @@ async function updateList(accessToken, list_id, sublists_ids){
         while (iterate){
             const res = await fetch(`https://api.spotify.com/v1/playlists/${list_id}/tracks?fields=items%28track%28uri%29%29&offset=${offset}&limit=100`, {
                 headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${access_token}`,
                 },
                 method: 'GET'
             });
@@ -160,7 +173,7 @@ async function updateList(accessToken, list_id, sublists_ids){
             while (iterate){
                 const res = await fetch(`https://api.spotify.com/v1/playlists/${sublist_id}/tracks?fields=items%28track%28uri%29%29&offset=${offset}&limit=100`, {
                     headers: {
-                    Authorization: `Bearer ${accessToken}`,
+                    Authorization: `Bearer ${access_token}`,
                     },
                     method: 'GET'
                 });
@@ -172,31 +185,31 @@ async function updateList(accessToken, list_id, sublists_ids){
         }
 
 
-        const toAdd = sublists_uris.filter(uri=> !list_uris.includes(uri));
-        const toDelete = list_uris.filter(uri=> !sublists_uris.includes(uri));
+        const to_add = sublists_uris.filter(uri=> !list_uris.includes(uri));
+        const to_delete = list_uris.filter(uri=> !sublists_uris.includes(uri));
 
-        while(toAdd.length > 0){
+        while(to_add.length > 0){
 
-            const subUris = toAdd.splice(0,100);
+            const sub_uris = to_add.splice(0,100);
             const addSongsRes = await fetch(`https://api.spotify.com/v1/playlists/${list_id}/tracks`, {
                 headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${access_token}`,
                 },
                 method: 'POST',
                 body: JSON.stringify({
-                    uris: subUris
+                    uris: sub_uris
                 })
             });
         }
-        while(toDelete.length > 0){
-            const subUris = toDelete.splice(0,100);
-            const tracks = subUris.map(uri=>{
+        while(to_delete.length > 0){
+            const sub_uris = to_delete.splice(0,100);
+            const tracks = sub_uris.map(uri=>{
                 return {uri:uri};
             })
 
-            const addSongsRes = await fetch(`https://api.spotify.com/v1/playlists/${list_id}/tracks`, {
+            await fetch(`https://api.spotify.com/v1/playlists/${list_id}/tracks`, {
                 headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${access_token}`,
                 },
                 method: 'DELETE',
                 body: JSON.stringify({

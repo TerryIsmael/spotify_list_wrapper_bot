@@ -1,9 +1,9 @@
 import app from './app.js'
 
-const serverPort = app.get('serverPort');
+const server_port = app.get('serverPort');
 
-const server = app.listen(serverPort, () => {
-  console.log(`Servidor iniciado en el puerto ${serverPort}`);
+const server = app.listen(server_port, () => {
+  console.log(`Servidor iniciado en el puerto ${server_port}`);
 });
 
 export default server;
